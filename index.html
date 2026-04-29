@@ -1,0 +1,2366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Automata Simulator — Neo4j</title>
+<script src="https://cdn.jsdelivr.net/npm/neo4j-driver@5/lib/browser/neo4j-web.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  /* Modern Slate & Indigo Palette */
+  --bg: #0f172a;           /* Deep Slate Background */
+  --surface: #1e293b;      /* Slightly lighter Slate for sidebars */
+  --card: #334155;         /* Lighter slate for inputs/cards */
+  --border: #475569;       /* Soft border */
+  --accent: #818cf8;       /* Bright Indigo */
+  --accent-hover: #6366f1; /* Deep Indigo */
+  --green: #10b981;        /* Emerald */
+  --red: #ef4444;          /* Red */
+  --yellow: #f59e0b;       /* Amber */
+  --text: #f8fafc;         /* Pure white text */
+  --muted: #94a3b8;        /* Muted text */
+  --state-bg: #0f172a;     
+  --font-ui: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Header ── */
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  z-index: 20;
+}
+header h1 { font-family: var(--font-mono); font-size: 16px; font-weight: 700; letter-spacing: 2px; color: var(--accent); }
+header .sep { color: var(--border); }
+header .sub { font-size: 13px; color: var(--muted); font-weight: 500; }
+
+#conn-badge {
+  margin-left: auto;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  background: var(--bg);
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+}
+
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.dot-green  { background: var(--green);  box-shadow: 0 0 8px var(--green); }
+.dot-red    { background: var(--red); }
+.dot-yellow { background: var(--yellow); animation: blink 1s infinite; }
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+/* ── Layout ── */
+.main { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Sidebar ── */
+.sidebar {
+  width: 320px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex-shrink: 0;
+  z-index: 10;
+  box-shadow: 4px 0 15px rgba(0,0,0,0.1);
+}
+.sidebar::-webkit-scrollbar { width: 6px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+
+.sec { padding: 20px 20px; border-bottom: 1px solid var(--border); }
+
+.sec-title {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+
+label { display: block; font-size: 12px; font-weight: 500; color: var(--text); margin-bottom: 6px; }
+
+input[type="text"],
+input[type="password"],
+input[type="number"],
+select,
+textarea {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  outline: none;
+  transition: all .2s ease;
+  appearance: none;
+  -webkit-appearance: none;
+}
+select { cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 28px; }
+select option { background: var(--card); }
+input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.2); }
+
+button {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .2s ease;
+}
+
+.btn-primary { width: 100%; background: var(--accent); color: var(--bg); margin-bottom: 8px; }
+.btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+.btn-load { width: 100%; background: var(--accent); color: var(--bg); }
+.btn-load:hover { background: var(--accent-hover); transform: translateY(-1px); }
+.btn-load:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+.btn-row { display: flex; gap: 8px; margin-top: 14px; }
+.btn-ghost {
+  flex: 1; background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); background: rgba(129, 140, 248, 0.1); }
+.btn-ghost:disabled { opacity: .4; cursor: not-allowed; background: transparent; border-color: var(--border); color: var(--muted); }
+
+.btn-run { flex: 1; background: var(--green); color: var(--bg); }
+.btn-run:hover { background: #059669; transform: translateY(-1px); }
+.btn-run:disabled { opacity: .5; cursor: not-allowed; background: var(--green); transform: none; }
+
+/* ── DFA Selector ── */
+.dfa-select-wrap { display: none; }
+.dfa-select-wrap.visible { display: block; }
+
+.dfa-info {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  font-size: 11px;
+  color: var(--muted);
+  min-height: 40px;
+  display: none;
+  line-height: 1.5;
+}
+.dfa-info.visible { display: block; }
+.dfa-info span { color: var(--accent); font-weight: 600; font-size: 12px; }
+
+/* ── Char display ── */
+.char-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 42px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  margin-top: 10px;
+}
+.ch {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 4px;
+  font-size: 14px; font-weight: 700; font-family: var(--font-mono);
+  background: var(--card);
+  border: 1px solid var(--border);
+  transition: all .2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.ch.active { background: rgba(245, 158, 11, 0.2); border-color: var(--yellow); color: var(--yellow); transform: scale(1.15) translateY(-2px); box-shadow: 0 4px 10px rgba(245, 158, 11, 0.3); z-index: 2; }
+.ch.done   { background: rgba(16, 185, 129, 0.1); border-color: var(--green); color: var(--green); opacity: .7; }
+
+/* ── Trace ── */
+.trace-scroll {
+  max-height: 180px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 8px;
+  background: var(--bg);
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.trace-scroll::-webkit-scrollbar { width: 4px; }
+.trace-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+.trace-line { font-size: 12px; font-family: var(--font-mono); display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.tl-sym  { color: var(--yellow); font-weight: 700; background: rgba(245, 158, 11, 0.1); padding: 2px 6px; border-radius: 4px;}
+.tl-to   { color: var(--accent); font-weight: 600;}
+.tl-dead { color: var(--red); font-weight: 700;}
+
+.result-box {
+  margin-top: 12px; padding: 10px 14px; border-radius: 6px;
+  font-size: 13px; font-weight: 700; letter-spacing: 1px; text-align: center;
+}
+.res-accept { background: rgba(16, 185, 129, 0.1); border: 1px solid var(--green); color: var(--green); }
+.res-reject { background: rgba(239, 68, 68, 0.1); border: 1px solid var(--red); color: var(--red); }
+.res-sub { font-size: 11px; font-weight: 500; color: var(--muted); margin-top: 6px; text-align: center; }
+
+/* ── Simulation Mode Toggle ── */
+/* ── Backtrack trace enhancements ── */
+.tl-backtrack { color: var(--red); font-weight: 700; font-style: italic; }
+.tl-explore   { color: #a78bfa; font-weight: 600; }
+.tl-success   { color: var(--green); font-weight: 700; }
+.trace-line.bt-fail { opacity: 0.55; }
+.trace-line.bt-backtrack { background: rgba(239,68,68,0.06); border-radius: 4px; padding: 2px 4px; }
+.trace-line.bt-success  { background: rgba(16,185,129,0.08); border-radius: 4px; padding: 2px 4px; }
+
+/* ── Legend ── */
+.legend-items { display: flex; flex-direction: column; gap: 10px; font-size: 12px; color: var(--muted); }
+.li { display: flex; align-items: center; gap: 10px; }
+.lc { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--accent); background: var(--state-bg); flex-shrink: 0; }
+.lc-accept { border-color: var(--green); box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--green); }
+.lc-current { border-color: var(--yellow); background: rgba(245, 158, 11, 0.15); box-shadow: 0 0 10px rgba(245, 158, 11, 0.4); }
+
+/* ── Canvas ── */
+.canvas-area { 
+  flex: 1; 
+  display: flex; 
+  flex-direction: column; 
+  overflow: hidden; 
+  position: relative; 
+  height: 100%; 
+  /* Modern Grid Background */
+  background-color: var(--bg);
+  background-image: radial-gradient(var(--border) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+.canvas-bar {
+  padding: 10px 24px; border-bottom: 1px solid var(--border);
+  background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(8px); font-size: 12px; color: var(--text); flex-shrink: 0;
+  display: flex; align-items: center; gap: 12px;
+  position: absolute; top: 0; left: 0; right: 0; z-index: 5;
+}
+.canvas-bar .dfa-tag {
+  background: var(--accent); border: 1px solid var(--accent-hover);
+  color: var(--bg); border-radius: 4px; padding: 3px 8px;
+  font-size: 10px; font-weight: 700; letter-spacing: 1px;
+}
+
+#svg-canvas {
+  flex: 1; 
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  display: block;
+  background: transparent;
+  pointer-events: all;
+}
+
+.floating-controls {
+  position: absolute; 
+  bottom: 24px; 
+  right: 24px; 
+  display: flex; 
+  flex-direction: column; 
+  gap: 8px; 
+  z-index: 10;
+  background: var(--surface);
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+.floating-controls button {
+  width: 36px; height: 36px; 
+  background: var(--card); 
+  border: 1px solid var(--border); 
+  color: var(--text); 
+  font-size: 16px; 
+  border-radius: 6px; 
+  cursor: pointer; 
+  display: flex; align-items: center; justify-content: center;
+  transition: all .2s;
+}
+.floating-controls button:hover { background: var(--accent); color: var(--bg); border-color: var(--accent); transform: translateY(-1px); }
+.floating-controls button.fit-btn { font-size: 10px; font-weight: 700; font-family: var(--font-ui); }
+
+/* ── Create Automaton Modal ── */
+.modal-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 820px;
+  max-width: 96vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.modal-header h2 { font-size: 14px; font-weight: 700; letter-spacing: 1.5px; color: var(--text); }
+.modal-close {
+  background: transparent; border: none; color: var(--muted);
+  font-size: 24px; cursor: pointer; line-height: 1; padding: 0 4px;
+}
+.modal-close:hover { color: var(--red); transform: scale(1.1); }
+
+.modal-body {
+  overflow-y: auto; padding: 24px;
+  display: flex; flex-direction: column; gap: 24px;
+  flex: 1;
+}
+.modal-body::-webkit-scrollbar { width: 6px; }
+.modal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+  display: flex; gap: 12px; justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+/* Form rows */
+.form-row { display: flex; gap: 16px; }
+.form-group { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.form-group textarea {
+  resize: vertical;
+  min-height: 60px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+/* Section label inside modal */
+.modal-sec-title {
+  font-size: 11px; letter-spacing: 2px; font-weight: 700;
+  color: var(--accent); text-transform: uppercase;
+  border-bottom: 2px solid var(--card);
+  padding-bottom: 8px; margin-bottom: 4px;
+}
+
+/* Alphabet pills */
+.alpha-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.alpha-pill {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 20px; padding: 4px 12px;
+  font-size: 13px; font-weight: 600; color: var(--text);
+  font-family: var(--font-mono);
+}
+.alpha-pill button {
+  background: none; border: none; cursor: pointer;
+  color: var(--muted); font-size: 16px; line-height: 1;
+  padding: 0; padding-bottom: 2px;
+}
+.alpha-pill button:hover { color: var(--red); }
+
+/* State config cards */
+.state-cards { display: flex; flex-direction: column; gap: 10px; }
+.state-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex; align-items: center; gap: 16px;
+  flex-wrap: wrap;
+}
+.state-card-name {
+  font-weight: 700; font-size: 14px; font-family: var(--font-mono);
+  color: var(--accent); min-width: 40px;
+}
+.state-card label { font-size: 12px; color: var(--text); margin: 0; display:flex; align-items:center; cursor:pointer;}
+.state-card input[type="radio"],
+.state-card input[type="checkbox"] { margin-right: 6px; width: 14px; height: 14px; accent-color: var(--accent); }
+
+/* Transition table */
+.trans-table-wrap { overflow-x: auto; background: var(--card); border-radius: 8px; border: 1px solid var(--border); }
+table.trans-table {
+  border-collapse: collapse; width: 100%;
+  font-size: 12px; font-family: var(--font-mono);
+}
+table.trans-table th {
+  background: rgba(0,0,0,0.1);
+  padding: 10px 14px;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  font-size: 11px; letter-spacing: 1px; font-family: var(--font-ui);
+  color: var(--muted);
+}
+table.trans-table td {
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  padding: 8px 10px;
+  text-align: center;
+  min-width: 110px;
+}
+table.trans-table td:last-child, table.trans-table th:last-child { border-right: none; }
+table.trans-table tr:last-child td { border-bottom: none; }
+
+table.trans-table td.state-label {
+  font-weight: 700; color: var(--accent);
+  background: rgba(0,0,0,0.1); min-width: 80px;
+}
+.trans-cell {
+  width: 100%; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 4px;
+  color: var(--text); font-family: var(--font-mono);
+  font-size: 12px; padding: 6px 8px;
+  outline: none; text-align: center;
+  transition: all .2s; margin-bottom: 0 !important;
+}
+.trans-cell:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.2); }
+.trans-cell.nfa { color: #a78bfa; }
+
+/* Modal buttons */
+.btn-modal-cancel {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text); border-radius: 6px;
+  font-family: var(--font-ui); font-size: 12px; font-weight: 600;
+  letter-spacing: 1px; padding: 10px 20px; cursor: pointer;
+}
+.btn-modal-cancel:hover { border-color: var(--red); color: var(--red); background: rgba(239, 68, 68, 0.1); }
+
+.btn-modal-save {
+  background: var(--accent); border: none;
+  color: var(--bg); border-radius: 6px;
+  font-family: var(--font-ui); font-size: 12px; font-weight: 700;
+  letter-spacing: 1px; padding: 10px 24px; cursor: pointer;
+}
+.btn-modal-save:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);}
+.btn-modal-save:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.modal-msg {
+  font-size: 12px; padding: 8px 12px; border-radius: 6px; font-weight: 500;
+  margin-right: auto; display: flex; align-items: center;
+}
+.modal-msg.ok  { background: rgba(16, 185, 129, 0.1); color: var(--green); border: 1px solid var(--green); }
+.modal-msg.err { background: rgba(239, 68, 68, 0.1); color: var(--red);   border: 1px solid var(--red); }
+
+/* ── Delete Confirm Modal ── */
+.del-modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(15,23,42,0.75); backdrop-filter: blur(4px);
+  z-index: 2000; align-items: center; justify-content: center;
+}
+.del-modal-overlay.open { display: flex; }
+.del-modal {
+  background: var(--surface); border: 1px solid var(--red);
+  border-radius: 12px; width: 420px; max-width: 94vw;
+  padding: 28px 28px 24px; text-align: center;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+}
+.del-modal h3 { font-size: 16px; font-weight: 700; color: var(--red); margin-bottom: 10px; letter-spacing: 1px; }
+.del-modal p  { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 22px; }
+.del-modal p strong { color: var(--text); }
+.del-modal-btns { display: flex; gap: 12px; justify-content: center; }
+.btn-del-confirm {
+  background: var(--red); color: #fff; border: none;
+  border-radius: 6px; padding: 10px 24px;
+  font-family: var(--font-ui); font-size: 12px; font-weight: 700;
+  letter-spacing: .5px; cursor: pointer; transition: all .2s;
+}
+.btn-del-confirm:hover  { background: #dc2626; transform: translateY(-1px); }
+.btn-del-confirm:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+.btn-del-cancel {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text); border-radius: 6px; padding: 10px 24px;
+  font-family: var(--font-ui); font-size: 12px; font-weight: 600;
+  letter-spacing: .5px; cursor: pointer; transition: all .2s;
+}
+.btn-del-cancel:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Connection Panel ── */
+.conn-panel-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  padding: 0;
+  border: none;
+  background: none;
+  width: 100%;
+}
+.conn-panel-toggle:hover .sec-title { color: var(--accent); }
+.conn-panel-toggle .caret {
+  font-size: 10px;
+  color: var(--muted);
+  transition: transform .25s ease;
+}
+.conn-panel-toggle.open .caret { transform: rotate(180deg); }
+
+.conn-fields {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height .3s ease, opacity .3s ease;
+  opacity: 0;
+}
+.conn-fields.open {
+  max-height: 400px;
+  opacity: 1;
+}
+
+/* Fixed Empty Hint Class */
+.empty-hint {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center; color: var(--muted); pointer-events: none;
+}
+.empty-hint h2 { font-size: 20px; letter-spacing: 4px; margin-bottom: 12px; font-weight: 700; color: var(--border); }
+.empty-hint p  { font-size: 14px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>AUTOMATA SIMULATOR</h1>
+  <span class="sep">|</span>
+  <span class="sub">Neo4j Visualizer</span>
+  <div id="conn-badge">
+    <span class="dot dot-red"></span>
+    <span id="conn-txt">Disconnected</span>
+  </div>
+</header>
+
+<div class="main">
+
+  <div class="sidebar">
+
+    <div class="sec">
+      <button class="conn-panel-toggle open" id="conn-panel-toggle" onclick="toggleConnPanel()">
+        <div class="sec-title" style="margin-bottom:0">① Neo4j Connection</div>
+        <span class="caret">▼</span>
+      </button>
+      <div class="conn-fields open" id="conn-fields" style="margin-top:14px">
+        <label>URI</label>
+        <input type="text" id="uri" value="neo4j://127.0.0.1:7687">
+        <label>Username</label>
+        <input type="text" id="user" value="neo4j">
+        <label>Password</label>
+        <input type="password" id="pass" placeholder="••••••••" oninput="localStorage.setItem('neo4j_pass', this.value)">
+        <input type="hidden" id="db" value="neo4j">
+        <button class="btn-primary" id="btn-connect" onclick="connectAndFetch()">⚡ CONNECT</button>
+        <button onclick="openCreateModal()" style="width:100%;background:transparent;border:1px dashed var(--border);color:var(--text);border-radius:6px;padding:10px;font-family:var(--font-ui);font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;margin-top:6px;transition:all .2s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text)'" id="btn-open-create">
+          ＋ CREATE NEW AUTOMATON
+        </button>
+      </div>
+    </div>
+
+    <div class="sec dfa-select-wrap" id="dfa-select-sec">
+      <div class="sec-title">② Select Automaton</div>
+      <label>Available DFAs</label>
+      <select id="dfa-dropdown" onchange="onDfaChange()">
+        <option value="">-- select a DFA --</option>
+      </select>
+      <div class="dfa-info" id="dfa-info">
+        </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-load" id="btn-load" onclick="loadSelectedDFA()" disabled style="flex:1">▶ LOAD DFA</button>
+        <button class="btn-ghost" onclick="clearSavedPositions()" title="Reset to auto layout" style="flex:0 0 42px; padding:0; display:flex; align-items:center; justify-content:center; font-size:16px;" id="btn-reset-layout">↺</button>
+        <button id="btn-delete-dfa" onclick="openDeleteModal()" disabled
+          title="Delete selected automaton from database"
+          style="flex:0 0 42px;padding:0;display:flex;align-items:center;justify-content:center;
+                 font-size:16px;background:transparent;border:1px solid var(--border);
+                 color:var(--muted);border-radius:6px;cursor:pointer;transition:all .2s;"
+          onmouseover="if(!this.disabled){this.style.borderColor='var(--red)';this.style.color='var(--red)';this.style.background='rgba(239,68,68,0.1)'}"
+          onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)';this.style.background='transparent'">
+          🗑
+        </button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">③ Simulate String</div>
+      <label>Input String</label>
+      <input type="text" id="inp" placeholder="e.g. 0101" oninput="updateChars()">
+      <div class="char-row" id="chars">
+        <span style="color:var(--muted);font-size:11px;align-self:center;margin:auto">type a string above...</span>
+      </div>
+      <div style="margin-top:12px;margin-bottom:4px;">
+        <div style="font-size:10px;letter-spacing:1.5px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-bottom:8px">Simulation Mode</div>
+        
+      </div>
+      <div class="btn-row">
+        <button class="btn-ghost" id="btn-reset" onclick="resetSim()" disabled>RESET</button>
+        <button class="btn-ghost" id="btn-step"  onclick="stepSim()"  disabled>STEP</button>
+        <button class="btn-run"   id="btn-run"   onclick="runSim()"   disabled>RUN ▶</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">Trace Log</div>
+      <div class="trace-scroll" id="trace">
+        <div class="trace-line" style="font-style:italic; justify-content:center;">No simulation yet...</div>
+      </div>
+      <div id="result"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">Legend</div>
+      <div class="legend-items">
+        <div class="li"><div class="lc"></div><span>Normal state</span></div>
+        <div class="li"><div class="lc lc-accept"></div><span>Accept state (double ring)</span></div>
+        <div class="li"><div class="lc lc-current"></div><span>Current state (highlighted)</span></div>
+        <div class="li">
+          <div style="display:flex;align-items:center;gap:0;flex-shrink:0">
+            <div style="width:20px;height:2px;background:var(--accent)"></div>
+            <div style="border:4px solid transparent;border-left:8px solid var(--accent);margin-left:-1px"></div>
+          </div>
+          <span>Transition arrow</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">④ Layout Storage</div>
+      <div id="file-status" style="font-size:11px;color:var(--muted);margin-bottom:12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 12px;line-height:1.6">
+        Layouts auto-saved to browser storage.
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-ghost" onclick="exportLayoutJSON()" style="flex:1;font-size:11px;padding:9px 8px;font-weight:700;letter-spacing:.5px;">↓ EXPORT</button>
+        <button class="btn-ghost" onclick="importLayoutJSON()" style="flex:1;font-size:11px;padding:9px 8px;font-weight:700;letter-spacing:.5px;">↑ IMPORT</button>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:10px;line-height:1.6;opacity:.8">
+        Node positions persist automatically. EXPORT saves a .json backup; IMPORT restores it — no browser dialogs.
+      </div>
+    </div>
+  </div>
+
+  <div class="canvas-area">
+    <div class="canvas-bar" id="bar">
+      Connect to Neo4j and select a DFA to begin
+    </div>
+    <div class="empty-hint" id="hint">
+      <h2>NO AUTOMATON</h2>
+      <p>Connect → Select DFA → Load</p>
+    </div>
+    <svg id="svg-canvas" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arr"   markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+          <polygon points="0 0, 10 4, 0 8" fill="#818cf8"/>
+        </marker>
+        <marker id="arr-y" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+          <polygon points="0 0, 10 4, 0 8" fill="#f59e0b"/>
+        </marker>
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="5" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <g id="viewport"></g>
+    </svg>
+    <div class="floating-controls">
+      <button onclick="zoomBy(1.2)" title="Zoom In">+</button>
+      <button onclick="zoomBy(0.83)" title="Zoom Out">−</button>
+      <button onclick="resetView()" class="fit-btn" title="Fit to Screen">FIT</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="create-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>＋ CREATE NEW AUTOMATON</h2>
+      <button class="modal-close" onclick="closeCreateModal()">✕</button>
+    </div>
+
+    <div class="modal-body">
+
+      <div>
+        <div class="modal-sec-title">① Basic Information</div>
+        <div class="form-row" style="margin-top:12px">
+          <div class="form-group" style="flex:2">
+            <label>Automaton Name</label>
+            <input type="text" id="c-name" placeholder="e.g. DFA for strings ending in ab">
+          </div>
+          <div class="form-group" style="flex:1">
+            <label>Automaton ID (unique)</label>
+            <input type="text" id="c-id" placeholder="e.g. dfa_ends_ab">
+          </div>
+        </div>
+        <div class="form-group" style="margin-top:10px">
+          <label>Description</label>
+          <textarea id="c-desc" placeholder="e.g. L = { w | w ends with 'ab' }"></textarea>
+        </div>
+      </div>
+
+      <div>
+        <div class="modal-sec-title">② Alphabet (Input Symbols)</div>
+        <div class="form-row" style="margin-top:12px; align-items:flex-end">
+          <div class="form-group" style="flex:0 0 180px">
+            <label>Add Symbol</label>
+            <input type="text" id="c-sym-input" placeholder="e.g. a  or  0" maxlength="5"
+              onkeydown="if(event.key==='Enter'||event.key===',')addSymbol()">
+          </div>
+          <button onclick="addSymbol()" style="flex:0 0 auto;height:38px;padding:0 20px;background:var(--accent);border:none;color:var(--bg);border-radius:6px;font-family:var(--font-ui);font-size:12px;font-weight:700;cursor:pointer;margin-bottom:12px">
+            ADD
+          </button>
+          <div class="form-group" style="flex:1; margin-left:16px">
+            <label>Quick presets</label>
+            <div style="display:flex;gap:8px">
+              <button onclick="setAlphabet(['a','b'])" class="btn-ghost" style="font-size:11px;padding:8px 14px">{a,b}</button>
+              <button onclick="setAlphabet(['0','1'])" class="btn-ghost" style="font-size:11px;padding:8px 14px">{0,1}</button>
+              <button onclick="setAlphabet(['0','1','2'])" class="btn-ghost" style="font-size:11px;padding:8px 14px">{0,1,2}</button>
+            </div>
+          </div>
+        </div>
+        <div class="alpha-pills" id="alpha-pills">
+          <span style="font-size:12px;color:var(--muted);font-style:italic;margin-top:4px">No symbols added yet...</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="modal-sec-title">③ States</div>
+        <div class="form-row" style="margin-top:12px;align-items:flex-end">
+          <div class="form-group" style="flex:0 0 180px">
+            <label>Number of States</label>
+            <input type="number" id="c-num-states" min="1" max="30" value="3"
+              oninput="buildStateCards()">
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;margin-left:16px">
+            <input type="checkbox" id="c-is-nfa" onchange="buildTransTable()" style="width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer;">
+            <label for="c-is-nfa" style="font-size:13px;color:var(--text);margin:0;cursor:pointer;font-weight:400;">
+              <strong>NFA mode</strong> (allow multiple targets per cell, comma-separated)
+            </label>
+          </div>
+        </div>
+        <div class="state-cards" id="state-cards" style="margin-top:14px">
+          </div>
+      </div>
+
+      <div>
+        <div class="modal-sec-title">④ Transition Table</div>
+        <div style="font-size:12px;color:var(--muted);margin:8px 0 14px;line-height:1.5;">
+          Each cell = the state(s) you go to. Leave empty for no transition (dead/trap).<br>
+          In NFA mode, separate multiple targets with commas: <strong style="color:var(--text)">q0,q1</strong>
+        </div>
+        <div class="trans-table-wrap" id="trans-table-wrap">
+          <div style="padding: 16px;">
+            <em style="font-size:12px;color:var(--muted)">Add symbols and states first...</em>
+          </div>
+        </div>
+      </div>
+
+    </div><div class="modal-footer">
+      <span id="modal-msg" class="modal-msg" style="display:none"></span>
+      <button class="btn-modal-cancel" onclick="closeCreateModal()">CANCEL</button>
+      <button class="btn-modal-save" id="btn-modal-save" onclick="saveAutomaton()">
+        💾 SAVE TO NEO4J
+      </button>
+    </div>
+  </div>
+</div>
+<script>
+// ─────────────────────────────────────────────────────────
+// Connection Panel Toggle & Password Restore
+// ─────────────────────────────────────────────────────────
+function toggleConnPanel() {
+  const toggle = document.getElementById('conn-panel-toggle');
+  const fields = document.getElementById('conn-fields');
+  toggle.classList.toggle('open');
+  fields.classList.toggle('open');
+}
+
+// Restore saved password on load + wire delete-modal backdrop
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('neo4j_pass');
+  if (saved) document.getElementById('pass').value = saved;
+
+  document.getElementById('delete-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('delete-modal')) closeDeleteModal();
+  });
+});
+
+// ─────────────────────────────────────────────────────────
+// Global State
+// ─────────────────────────────────────────────────────────
+const R  = 36;   // state circle radius slightly larger
+const RO = 48;   // accept outer ring radius
+
+// UI Colors matched to CSS root variables
+const C_ACCENT = '#818cf8';
+const C_BG_STATE = '#1e293b';
+const C_HIGHLIGHT = '#f59e0b';
+const C_ACCEPT = '#10b981';
+const C_TEXT = '#f8fafc';
+const C_BG_LABEL = '#0f172a';
+
+let states      = [];   // { name, label, start, accept, x, y }
+let transitions = [];   // { from, to, symbol }
+let automata    = [];   // { id, name, description }
+
+let curIdx     = -1;
+let simStep    = 0;
+let simRunning = false;
+let curStates  = [];      // NFA: array of active state names
+let isNFAMode  = false;   // true if loaded automaton is an NFA
+
+// Backtrack: event-based sequential path animation
+let btEvents   = [];   // flat list of animation events
+let btEventIdx = 0;    // pointer into btEvents
+let btDone     = false;
+let btResults  = [];   // collected results for final summary
+
+
+
+let globalDriver = null;  // keep driver alive between steps
+
+// ─────────────────────────────────────────────────────────
+// Step 1 — Connect & fetch automaton list
+// ─────────────────────────────────────────────────────────
+async function connectAndFetch() {
+  setBadge('Connecting…', 'yellow');
+  setBar('Connecting to Neo4j…');
+
+  const uri  = v('uri');
+  const user = v('user');
+  const pass = v('pass');
+  const db   = v('db');
+
+  if (globalDriver) {
+    try { await globalDriver.close(); } catch(_) {}
+    globalDriver = null;
+  }
+
+  try {
+    globalDriver = neo4j.driver(uri, neo4j.auth.basic(user, pass));
+    await globalDriver.verifyConnectivity();
+  } catch(e) {
+    setBadge('Failed', 'red');
+    setBar('Connection error: ' + e.message);
+    globalDriver = null;
+    return;
+  }
+
+  try {
+    const ses = globalDriver.session({ database: db });
+    const res = await ses.run(
+      'MATCH (a:Automaton) RETURN a.id AS id, a.name AS name, a.description AS desc ORDER BY a.name'
+    );
+    await ses.close();
+
+    automata = res.records.map(r => ({
+      id:   r.get('id'),
+      name: r.get('name'),
+      desc: r.get('desc') || ''
+    }));
+
+    if (automata.length === 0) {
+      setBadge('Connected', 'green');
+      setBar('Connected — but no Automaton nodes found. Add your DFAs first.');
+      return;
+    }
+
+    const dd = document.getElementById('dfa-dropdown');
+    dd.innerHTML = '<option value="">-- select a DFA --</option>';
+    automata.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.id;
+      opt.textContent = a.name + '  [' + a.id + ']';
+      dd.appendChild(opt);
+    });
+
+    document.getElementById('dfa-select-sec').classList.add('visible');
+    document.getElementById('btn-load').disabled = true;
+    document.getElementById('dfa-info').classList.remove('visible');
+
+    setBadge('Connected', 'green');
+    setBar(`Connected — found ${automata.length} automaton(s). Select one below.`);
+
+    // Auto-collapse connection panel after successful connect
+    const toggle = document.getElementById('conn-panel-toggle');
+    const fields = document.getElementById('conn-fields');
+    if (toggle.classList.contains('open')) { toggle.classList.remove('open'); fields.classList.remove('open'); }
+
+  } catch(e) {
+    setBadge('Query error', 'red');
+    setBar('Error fetching automata: ' + e.message);
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Step 2 — DFA dropdown change
+// ─────────────────────────────────────────────────────────
+function onDfaChange() {
+  const id  = v('dfa-dropdown');
+  const btn = document.getElementById('btn-load');
+  const del = document.getElementById('btn-delete-dfa');
+  const info = document.getElementById('dfa-info');
+
+  if (!id) {
+    btn.disabled = true;
+    del.disabled = true;
+    info.classList.remove('visible');
+    return;
+  }
+
+  const selected = automata.find(a => a.id === id);
+  if (selected) {
+    info.classList.add('visible');
+    info.innerHTML = `<span>${esc(selected.name)}</span><br><div style="margin-top:4px">${esc(selected.desc) || 'No description'}</div>`;
+  }
+
+  btn.disabled = false;
+  del.disabled = false;
+}
+
+// ─────────────────────────────────────────────────────────
+// Step 3 — Load selected DFA
+// ─────────────────────────────────────────────────────────
+async function loadSelectedDFA() {
+  const dfaId = v('dfa-dropdown');
+  if (!dfaId) { setBar('Please select a DFA first.'); return; }
+  if (!globalDriver) { setBar('Not connected — please connect first.'); return; }
+
+  const db = v('db');
+  const selected = automata.find(a => a.id === dfaId);
+
+  setBar('Loading DFA: ' + (selected ? selected.name : dfaId) + '…');
+
+  try {
+    const ses = globalDriver.session({ database: db });
+
+    const sr = await ses.run(
+      `MATCH (a:Automaton {id: $dfaId})-[:HAS_STATE]->(s:State)
+       RETURN s ORDER BY s.name`,
+      { dfaId }
+    );
+
+    states = sr.records.map(r => {
+      const p = r.get('s').properties;
+      return {
+        name:   p.name,
+        label:  p.label || p.name,
+        start:  p.isStart  === true || p.isStart  === 'true',
+        accept: p.isAccept === true || p.isAccept === 'true',
+        x: 0, y: 0
+      };
+    });
+
+    const tr = await ses.run(
+      `MATCH (a:Automaton {id: $dfaId})-[:HAS_STATE]->(s:State)-[t:TRANSITION]->(s2:State)
+       RETURN s.name AS f, t.symbol AS sym, s2.name AS to`,
+      { dfaId }
+    );
+
+    transitions = tr.records.map(r => ({
+      from:   r.get('f'),
+      symbol: r.get('sym'),
+      to:     r.get('to')
+    }));
+
+    await ses.close();
+
+    if (states.length === 0) {
+      setBar('No states found for this DFA. Check your HAS_STATE relationships.');
+      return;
+    }
+
+    const startStates = states.filter(s => s.start);
+    if (startStates.length === 0) {
+      setBar('Warning: No start state found (isStart=true). Simulation may not work.');
+    }
+
+    document.getElementById('hint').style.display = 'none';
+
+    currentDfaId = dfaId;
+
+    layout();
+    const restored = loadSavedPositions();
+    const statLabel = restored ? 'layout restored' : 'auto layout';
+    setBar(``, selected ? selected.name : dfaId, `${states.length} states · ${transitions.length} transitions · ${statLabel}`);
+
+    resetView(); // <--- This will now correctly fit the whole DFA to screen
+    draw();
+    resetSim();
+    enableSimButtons(true);
+
+  } catch(e) {
+    setBar('Error loading DFA: ' + e.message);
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Layout — force-directed (nodes repel, edges attract)
+// ─────────────────────────────────────────────────────────
+function layout() {
+  const svg = document.getElementById('svg-canvas');
+  const W   = svg.clientWidth  || 900;
+  const H   = svg.clientHeight || 620;
+  const n   = states.length;
+  if (!n) return;
+
+  if (n === 1) { states[0].x = W/2; states[0].y = H/2; return; }
+
+  const cx = W / 2, cy = H / 2;
+  const seed = Math.min(W, H) * 0.32;
+  states.forEach((s, i) => {
+    const a = (2 * Math.PI * i / n) - Math.PI / 2;
+    s.x = cx + seed * Math.cos(a);
+    s.y = cy + seed * Math.sin(a);
+  });
+
+  const IDEAL   = Math.max(140, Math.min(W, H) * 0.30);
+  const REPULSE = IDEAL * IDEAL * 2.0;
+  const ITERS   = 300;
+  const COOL    = 0.95;
+  let   temp    = Math.min(W, H) * 0.15;
+
+  const vx = new Array(n).fill(0);
+  const vy = new Array(n).fill(0);
+
+  for (let iter = 0; iter < ITERS; iter++) {
+    for (let i = 0; i < n; i++) { vx[i] = 0; vy[i] = 0; }
+
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const dx  = states[i].x - states[j].x;
+        const dy  = states[i].y - states[j].y;
+        const d2  = Math.max(dx*dx + dy*dy, 1);
+        const f   = REPULSE / d2;
+        const d   = Math.sqrt(d2);
+        vx[i] += f * dx / d;  vy[i] += f * dy / d;
+        vx[j] -= f * dx / d;  vy[j] -= f * dy / d;
+      }
+    }
+
+    const seen = new Set();
+    transitions.forEach(t => {
+      const fi = states.findIndex(s => s.name === t.from);
+      const ti = states.findIndex(s => s.name === t.to);
+      if (fi < 0 || ti < 0 || fi === ti) return;
+      const key = Math.min(fi,ti) + '-' + Math.max(fi,ti);
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      const dx = states[ti].x - states[fi].x;
+      const dy = states[ti].y - states[fi].y;
+      const d  = Math.max(Math.sqrt(dx*dx + dy*dy), 1);
+      const f  = (d - IDEAL) * 0.35;
+      vx[fi] += f * dx / d;  vy[fi] += f * dy / d;
+      vx[ti] -= f * dx / d;  vy[ti] -= f * dy / d;
+    });
+
+    for (let i = 0; i < n; i++) {
+      vx[i] += (cx - states[i].x) * 0.015;
+      vy[i] += (cy - states[i].y) * 0.015;
+    }
+
+    for (let i = 0; i < n; i++) {
+      const mag = Math.sqrt(vx[i]*vx[i] + vy[i]*vy[i]);
+      const clamped = Math.min(mag, temp);
+      if (mag > 0) {
+        states[i].x += vx[i] / mag * clamped;
+        states[i].y += vy[i] / mag * clamped;
+      }
+      // Give plenty of padding 
+      const pad = 120;
+      states[i].x = Math.max(pad, Math.min(W - pad, states[i].x));
+      states[i].y = Math.max(pad, Math.min(H - pad, states[i].y));
+    }
+    temp *= COOL;
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Draw
+// ─────────────────────────────────────────────────────────
+function draw(hlStates = null, hlTrans = null) {
+  const svg      = document.getElementById('svg-canvas');
+  const viewport = document.getElementById('viewport');
+  viewport.innerHTML = '';
+
+  if (!states.length) return;
+
+  // Accept either a single name (string) or an array of names
+  const hlSet = new Set(Array.isArray(hlStates) ? hlStates : (hlStates ? [hlStates] : []));
+
+  const edgeMap = {};
+  transitions.forEach(t => {
+    const k = t.from + '→' + t.to;
+    if (!edgeMap[k]) edgeMap[k] = [];
+    edgeMap[k].push(t.symbol);
+  });
+
+  Object.entries(edgeMap).forEach(([key, syms]) => {
+    const [f, t] = key.split('→');
+    const bidir  = (f !== t) && !!edgeMap[t + '→' + f];
+    const label  = syms.join(', ');
+    const hl     = hlTrans && hlTrans.from === f && hlTrans.to === t;
+
+    if (f === t) drawLoop(viewport, f, label, hl);
+    else         drawEdge(viewport, f, t, label, bidir, hl);
+  });
+
+  states.forEach(s => drawNode(viewport, s, hlSet.has(s.name)));
+}
+
+function getS(name) { return states.find(s => s.name === name); }
+function screenToViewport(sx, sy) { return { x: (sx - panX) / scale, y: (sy - panY) / scale }; }
+
+let draggingNode = null;
+
+function drawNode(svg, s, hl) {
+  const color  = hl ? C_HIGHLIGHT : s.accept ? C_ACCEPT : C_ACCENT;
+  const fillBg = hl ? 'rgba(245,158,11,.15)' : s.accept ? 'rgba(16,185,129,.1)' : C_BG_STATE;
+
+  if (s.start) {
+    makeLine(svg, s.x - R - 50, s.y, s.x - R - 2, s.y, {
+      stroke: C_ACCENT, 'stroke-width': 2.5, 'marker-end': 'url(#arr)'
+    });
+    makeText(svg, s.x - R - 26, s.y - 10, 'start', {
+      fill: C_ACCENT, 'font-size': 11, 'text-anchor': 'middle', 'font-weight': '600', 'font-family': 'Inter'
+    });
+  }
+
+  if (s.accept) {
+    const oc = makeEl('circle');
+    attr(oc, { cx: s.x, cy: s.y, r: RO, fill: 'none',
+      stroke: hl ? C_HIGHLIGHT : C_ACCEPT, 'stroke-width': hl ? 3 : 2.5 });
+    if (hl) oc.setAttribute('filter', 'url(#glow)');
+    svg.appendChild(oc);
+  }
+
+  const c = makeEl('circle');
+  attr(c, { cx: s.x, cy: s.y, r: R, fill: fillBg,
+    stroke: color, 'stroke-width': hl ? 3.5 : 2.5,
+    style: 'cursor:move' });
+  if (hl) c.setAttribute('filter', 'url(#glow)');
+  c.setAttribute('data-name', s.name);
+
+  c.addEventListener('mousedown', e => {
+    e.stopPropagation();
+    draggingNode = s.name;
+    document.getElementById('svg-canvas').style.cursor = 'move';
+  });
+
+  svg.appendChild(c);
+
+  makeText(svg, s.x, s.y + 5, s.label, {
+    fill: hl ? C_HIGHLIGHT : C_TEXT,
+    'font-size': 15, 'font-weight': 700, 'text-anchor': 'middle',
+    style: 'pointer-events:none', 'font-family': 'JetBrains Mono'
+  });
+}
+
+function drawEdge(svg, fn, tn, label, bidir, hl) {
+  const f = getS(fn);
+  const t = getS(tn);
+  if (!f || !t) return;
+
+  const color  = hl ? C_HIGHLIGHT : C_ACCENT;
+  const marker = hl ? 'url(#arr-y)' : 'url(#arr)';
+
+  const dx   = t.x - f.x, dy = t.y - f.y;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  const nx   = dx / dist, ny = dy / dist;   
+  const px   = -ny,       py = nx;           
+
+  const side  = bidir ? 18 : 0;
+  const curve = bidir ? 60 : 0;
+
+  const x1 = f.x + nx * R        + px * side;
+  const y1 = f.y + ny * R        + py * side;
+  const x2 = t.x - nx * (R + 12) + px * side;
+  const y2 = t.y - ny * (R + 12) + py * side;
+
+  const mx = (f.x + t.x) / 2 + px * curve;
+  const my = (f.y + t.y) / 2 + py * curve;
+
+  const d = bidir
+    ? `M ${x1} ${y1} Q ${mx} ${my} ${x2} ${y2}`
+    : `M ${x1} ${y1} L ${x2} ${y2}`;
+
+  const path = makeEl('path');
+  attr(path, { d, stroke: color, 'stroke-width': hl ? 3 : 2,
+    fill: 'none', 'marker-end': marker });
+  if (hl) path.setAttribute('filter', 'url(#glow)');
+  svg.appendChild(path);
+
+  let lx, ly;
+  if (bidir) { lx = mx; ly = my; } 
+  else { lx = (x1 + x2) / 2 + px * 20; ly = (y1 + y2) / 2 + py * 20; }
+  
+  drawEdgeLabel(svg, lx, ly, label, hl);
+}
+
+function drawLoop(svg, stateName, label, hl) {
+  const s = getS(stateName);
+  if (!s) return;
+
+  const color  = hl ? C_HIGHLIGHT : C_ACCENT;
+  const marker = hl ? 'url(#arr-y)' : 'url(#arr)';
+
+  const neighbours = transitions
+    .filter(t => t.from === stateName && t.to !== stateName)
+    .map(t => getS(t.to))
+    .filter(Boolean);
+
+  let loopAngle = -Math.PI / 2; 
+  if (neighbours.length > 0) {
+    let ax = 0, ay = 0;
+    neighbours.forEach(n => { ax += n.x - s.x; ay += n.y - s.y; });
+    const mag = Math.sqrt(ax*ax + ay*ay);
+    if (mag > 0) loopAngle = Math.atan2(-ay/mag, -ax/mag);
+  }
+
+  const loopR = 55;
+  const spread = 0.55;
+  const a1 = loopAngle - spread, a2 = loopAngle + spread;
+
+  const sx  = s.x + Math.cos(a1) * R;
+  const sy  = s.y + Math.sin(a1) * R;
+  const ex  = s.x + Math.cos(a2) * (R - 5);
+  const ey  = s.y + Math.sin(a2) * (R - 5);
+  const c1x = s.x + Math.cos(a1) * (R + loopR * 1.8);
+  const c1y = s.y + Math.sin(a1) * (R + loopR * 1.8);
+  const c2x = s.x + Math.cos(a2) * (R + loopR * 1.8);
+  const c2y = s.y + Math.sin(a2) * (R + loopR * 1.8);
+
+  const path = makeEl('path');
+  attr(path, {
+    d: `M ${sx} ${sy} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${ex} ${ey}`,
+    stroke: color, 'stroke-width': hl ? 3 : 2, fill: 'none', 'marker-end': marker
+  });
+  if (hl) path.setAttribute('filter', 'url(#glow)');
+  svg.appendChild(path);
+
+  const tipX = s.x + Math.cos(loopAngle) * (R + loopR * 2.1);
+  const tipY = s.y + Math.sin(loopAngle) * (R + loopR * 2.1);
+  drawEdgeLabel(svg, tipX, tipY, label, hl);
+}
+
+function drawEdgeLabel(svg, x, y, label, hl) {
+  const w  = label.length * 8.5 + 22;
+  const bg = makeEl('rect');
+  attr(bg, { x: x - w/2, y: y - 13, width: w, height: 24, rx: 4,
+    fill: C_BG_LABEL, opacity: .97, 'stroke': hl ? C_HIGHLIGHT : '#334155', 'stroke-width': 1.5 });
+  svg.appendChild(bg);
+
+  makeText(svg, x, y + 5, label, {
+    fill: hl ? '#fff' : C_TEXT,
+    'font-size': 13, 'font-weight': 700, 'text-anchor': 'middle',
+    style: 'pointer-events:none', 'font-family': 'JetBrains Mono'
+  });
+}
+
+// ─────────────────────────────────────────────────────────
+// NFA Helpers
+// ─────────────────────────────────────────────────────────
+
+// Returns true if the loaded automaton is an NFA
+// (any (from, symbol) has multiple targets, or ε-transitions exist)
+function detectNFA() {
+  const EPS = new Set(['ε', 'eps', 'epsilon', '']);
+  const seen = {};
+  for (const t of transitions) {
+    if (EPS.has(t.symbol)) return true;
+    const key = t.from + '|' + t.symbol;
+    if (seen[key]) return true;
+    seen[key] = true;
+  }
+  return false;
+}
+
+// Compute ε-closure of a set of state names
+function epsilonClosure(stateNames) {
+  const EPS = new Set(['ε', 'eps', 'epsilon', '']);
+  const result = new Set(stateNames);
+  const stack  = [...stateNames];
+  while (stack.length) {
+    const s = stack.pop();
+    for (const t of transitions) {
+      if (t.from === s && EPS.has(t.symbol) && !result.has(t.to)) {
+        result.add(t.to);
+        stack.push(t.to);
+      }
+    }
+  }
+  return [...result];
+}
+
+// Compute the set of states reachable from stateNames on symbol sym (no ε-closure)
+function nfaMove(stateNames, sym) {
+  const result = new Set();
+  for (const s of stateNames) {
+    for (const t of transitions) {
+      if (t.from === s && t.symbol === sym) result.add(t.to);
+    }
+  }
+  return [...result];
+}
+
+// ─────────────────────────────────────────────────────────
+// Simulation
+// ─────────────────────────────────────────────────────────
+function resetSim() {
+  simStep    = 0;
+  simRunning = false;
+  isNFAMode  = detectNFA();
+
+  // Initialize curStates: start state(s) + their ε-closure
+  const startNames = states.filter(s => s.start).map(s => s.name);
+  curStates = epsilonClosure(startNames);
+  curIdx    = states.findIndex(s => s.start); // kept for layout compat
+
+  // Reset backtrack state
+  btDone     = false;
+  btResults  = [];
+  btEvents   = [];
+  btEventIdx = 0;
+  if (startNames.length > 0) {
+    btEvents = computeBtEvents(v('inp'));
+  }
+
+  document.getElementById('trace').innerHTML =
+    '<div class="trace-line" style="font-style:italic; justify-content:center;">Press STEP or RUN to start...</div>';
+  document.getElementById('result').innerHTML = '';
+
+  updateNFABadge();
+  updateChars();
+  draw(curStates);
+}
+
+function stepSim() {
+  if (!states.length) return;
+  stepSimBacktrack();
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Backtrack DFS — pre-compute all paths, then animate them one at a time.
+//
+// Each path plays out sequentially:
+//   1. Highlight start state          (path-start event)
+//   2. Animate each transition step   (step events)
+//   3. Highlight final state & pause  (path-end event)
+//   4. Clear → next path              (clear event)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function computeBtEvents(inp) {
+  const events = [];
+  const EPS    = new Set(['ε', 'eps', 'epsilon', '']);
+
+  // Starting states: ε-closure of start states, filtered to useful
+  const startNames   = states.filter(s => s.start).map(s => s.name);
+  const closedStarts = epsilonClosure(startNames);
+  const usefulStarts = closedStarts.filter(name => {
+    const s = getS(name);
+    if (!s) return false;
+    if (s.accept) return true;
+    return transitions.some(t => t.from === name && !EPS.has(t.symbol));
+  });
+  const startSet = usefulStarts.length > 0 ? usefulStarts : closedStarts;
+
+  // DFS — collect every complete path
+  const allPaths = [];
+  const dfsStack = startSet.slice().reverse().map(s => ({ state: s, pos: 0, steps: [] }));
+
+  while (dfsStack.length > 0) {
+    const { state, pos, steps } = dfsStack.pop();
+    const eStates = epsilonClosure([state]);
+
+    if (pos === inp.length) {
+      allPaths.push({ steps, endState: state, accepted: !!getS(state)?.accept, deadAt: null });
+      continue;
+    }
+
+    const sym      = inp[pos];
+    const rawMoves = [];
+    eStates.forEach(s => {
+      transitions
+        .filter(t => t.from === s && t.symbol === sym)
+        .forEach(t => { if (!rawMoves.includes(t.to)) rawMoves.push(t.to); });
+    });
+    const moved = epsilonClosure(rawMoves);
+
+    if (moved.length === 0) {
+      allPaths.push({ steps, endState: state, accepted: false, deadAt: sym });
+      continue;
+    }
+
+    for (let i = moved.length - 1; i >= 0; i--) {
+      const next      = moved[i];
+      const nextLabel = getS(next)?.label  ?? next;
+      const fromLabel = getS(state)?.label ?? state;
+      dfsStack.push({
+        state: next,
+        pos:   pos + 1,
+        steps: [...steps, { fromState: state, fromLabel, sym, toState: next, toLabel: nextLabel }]
+      });
+    }
+  }
+
+  // Build flat event list
+  allPaths.forEach((path, pathIdx) => {
+    const pathId     = String(pathIdx + 1);
+    const startState = path.steps.length > 0 ? path.steps[0].fromState : path.endState;
+    const endLabel   = getS(path.endState)?.label ?? path.endState;
+
+    events.push({ type: 'path-start', pathId, startState });
+
+    path.steps.forEach((step, stepIdx) =>
+      events.push({ type: 'step', pathId, stepIdx, ...step })
+    );
+
+    events.push({
+      type: 'path-end', pathId,
+      steps: path.steps, endState: path.endState, endLabel,
+      accepted: path.accepted, deadAt: path.deadAt
+    });
+
+    if (pathIdx < allPaths.length - 1) events.push({ type: 'clear' });
+  });
+
+  events.push({ type: 'summary' });
+  return events;
+}
+
+function processBacktrackEvent(evt) {
+  const log = document.getElementById('trace');
+
+  switch (evt.type) {
+
+    case 'path-start': {
+      const sep = document.createElement('div');
+      sep.style.cssText =
+        'display:flex;align-items:center;gap:6px;margin:8px 0 4px;padding-top:7px;' +
+        'border-top:1px solid var(--border);font-size:10px;font-weight:700;' +
+        'letter-spacing:.8px;text-transform:uppercase;color:var(--accent)';
+      sep.innerHTML = '<span class="tl-explore">\u25b6</span>&nbsp;Path ' + esc(evt.pathId);
+      log.appendChild(sep);
+      log.scrollTop = log.scrollHeight;
+      updateChars();            // reset char strip
+      draw([evt.startState]);   // highlight start state
+      break;
+    }
+
+    case 'step': {
+      draw([evt.toState]);
+      markChar(evt.stepIdx, 'active');
+      simStep = evt.stepIdx + 1;
+      addTraceBacktrack(evt.fromLabel, evt.sym, evt.toLabel, 'explore');
+      break;
+    }
+
+    case 'path-end': {
+      draw([evt.endState]);   // keep final state highlighted
+
+      btResults.push({
+        pathId:    evt.pathId,
+        accepted:  evt.accepted,
+        traces:    evt.steps,
+        endState:  evt.endLabel,
+        stateName: evt.endState,
+        dead:      !evt.accepted && evt.deadAt != null,
+        deadAt:    evt.deadAt
+      });
+
+      if (evt.deadAt) {
+        const d = document.createElement('div');
+        d.className = 'trace-line bt-backtrack';
+        d.innerHTML =
+          '<span class="tl-backtrack">\u2717</span>' +
+          '<span>' + esc(evt.endLabel) + '</span>' +
+          '<span class="tl-sym">\'' + esc(evt.deadAt) + '\'</span>' +
+          '<span>\u2192</span><span class="tl-dead">no transition</span>';
+        log.appendChild(d);
+      } else {
+        const d = document.createElement('div');
+        d.className = 'trace-line ' + (evt.accepted ? 'bt-success' : 'bt-backtrack');
+        d.innerHTML = evt.accepted
+          ? '<span class="tl-success">\u2605</span>&nbsp;<span class="tl-success">Accepted at <strong>' + esc(evt.endLabel) + '</strong></span>'
+          : '<span class="tl-backtrack">\u2717</span>&nbsp;<span>Rejected \u2014 <strong>' + esc(evt.endLabel) + '</strong> not an accept state</span>';
+        log.appendChild(d);
+      }
+      log.scrollTop = log.scrollHeight;
+      break;
+    }
+
+    case 'clear': {
+      draw([]);       // wipe all highlights
+      updateChars();  // reset char strip
+      break;
+    }
+
+    case 'summary': {
+      btDone = true;
+      showBtSummary();
+      break;
+    }
+  }
+}
+
+function stepSimBacktrack() {
+  if (btDone) return;
+  const log = document.getElementById('trace');
+  const ph  = log.querySelector('[style*="italic"]');
+  if (ph) ph.remove();
+  if (btEventIdx >= btEvents.length) { btDone = true; return; }
+  processBacktrackEvent(btEvents[btEventIdx++]);
+}
+
+async function runSimBacktrack() {
+  simRunning = true;
+  const log  = document.getElementById('trace');
+  const ph   = log.querySelector('[style*="italic"]');
+  if (ph) ph.remove();
+
+  while (btEventIdx < btEvents.length && simRunning) {
+    const evt = btEvents[btEventIdx++];
+    processBacktrackEvent(evt);
+    if (!simRunning) break;
+    if (btDone) break;  // summary was just processed — result already shown, exit cleanly
+
+    // Delay per event — longest after path-end so user sees the highlighted final state
+    const delay =
+      evt.type === 'path-end'    ? 1100 :
+      evt.type === 'clear'       ?  500 :
+      evt.type === 'path-start'  ?  450 :
+      evt.type === 'summary'     ?    0 :
+                                    500 ;
+    if (delay > 0) await sleep(delay);
+  }
+  simRunning = false;
+}
+
+// ─────────────────────────────────────────────────────────
+// Final summary after all paths explored
+// ─────────────────────────────────────────────────────────
+function showBtSummary() {
+  const accepted = btResults.filter(r => r.accepted);
+  const rejected = btResults.filter(r => !r.accepted);
+  const total    = btResults.length;
+
+  markAllCharsDone();
+
+  // Highlight accept states if any path accepted, else keep dead-end states highlighted
+  if (accepted.length > 0) {
+    const acceptNodes      = [...new Set(accepted.map(r => r.endState))];
+    const acceptStateNames = states.filter(s => acceptNodes.includes(s.label ?? s.name)).map(s => s.name);
+    draw(acceptStateNames.length ? acceptStateNames : []);
+  } else {
+    const deadStateNames = [...new Set(rejected.map(r => r.stateName).filter(Boolean))];
+    draw(deadStateNames.length ? deadStateNames : []);
+  }
+
+  const log     = document.getElementById('trace');
+  const summary = document.createElement('div');
+  summary.style.cssText =
+    'margin-top:10px;padding:10px 12px;' +
+    'background:var(--card);border:1px solid var(--border);border-radius:8px;' +
+    'font-size:11px;line-height:1.8;';
+  summary.innerHTML =
+    '<div style="font-weight:700;font-size:12px;letter-spacing:.5px;margin-bottom:6px;color:var(--text)">' +
+    '\u{1F4CA} ALL PATHS EXPLORED (' + total + ' total)</div>' +
+    '<div style="color:var(--green)">' +
+      '\u2713 Accepting paths: ' + accepted.length +
+      (accepted.length ? ' \u2014 ' + accepted.map(r => 'Path ' + esc(r.pathId) + ' \u2192 <strong>' + esc(r.endState) + '</strong>').join(', ') : '') +
+    '</div>' +
+    '<div style="color:var(--red)">' +
+      '\u2717 Rejecting paths: ' + rejected.length +
+      (rejected.length ? ' \u2014 ' + rejected.map(r => 'Path ' + esc(r.pathId)).join(', ') : '') +
+    '</div>';
+  log.appendChild(summary);
+  log.scrollTop = log.scrollHeight;
+
+  const overall = accepted.length > 0;
+  showResult(
+    overall,
+    overall
+      ? 'Accepted — ' + accepted.length + ' of ' + total + ' path(s) reach an accept state'
+      : 'Rejected — all ' + total + ' path(s) failed'
+  );
+}
+
+async function runSim() {
+  if (!states.length) return;
+  resetSim();
+  await sleep(150);
+  await runSimBacktrack();
+}
+
+
+
+function addTrace(fromLabel, sym, toLabel) {
+  const log = document.getElementById('trace');
+  const ph  = log.querySelector('[style*="italic"]');
+  if (ph) ph.remove();
+
+  const d = document.createElement('div');
+  d.className = 'trace-line';
+
+  // Escape all Neo4j-sourced data before inserting into innerHTML
+  const ef = esc(fromLabel);
+  const es = esc(sym);
+  const et = toLabel ? esc(toLabel) : null;
+
+  // Wrap multi-state sets in { }
+  const fromStr = fromLabel.includes(',') ? `{${ef}}` : ef;
+  const toStr   = et ? (toLabel.includes(',') ? `{${et}}` : et) : null;
+
+  if (!toStr) {
+    d.innerHTML = `<span style="color:var(--red); font-size:14px;">✗</span>
+      <span>${fromStr}</span>
+      <span class="tl-sym">'${es}'</span>
+      <span>→</span>
+      <span class="tl-dead">DEAD</span>`;
+  } else {
+    d.innerHTML = `<span style="color:var(--green); font-size:14px; font-weight:900;">→</span>
+      <span>${fromStr}</span>
+      <span class="tl-sym">'${es}'</span>
+      <span>→</span>
+      <span class="tl-to">${toStr}</span>`;
+  }
+
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
+}
+
+// Backtrack-specific trace line with visual role markers
+function addTraceBacktrack(fromLabel, sym, toLabel, role) {
+  const log = document.getElementById('trace');
+  const d   = document.createElement('div');
+  const ef  = esc(fromLabel);
+  const es  = esc(sym);
+  const et  = toLabel != null ? esc(toLabel) : null;
+
+  if (role === 'success') {
+    d.className = 'trace-line bt-success';
+    d.innerHTML = `<span class="tl-success">✓</span>
+      <span>${ef}</span>
+      <span class="tl-sym">'${es}'</span>
+      <span>→</span>
+      <span class="tl-success">${et}</span>`;
+  } else if (role === 'fail') {
+    d.className = 'trace-line bt-fail';
+    d.innerHTML = `<span style="color:var(--red);font-size:11px;">✗</span>
+      <span style="text-decoration:line-through;opacity:.5">${ef}</span>
+      <span class="tl-sym" style="opacity:.5">'${es}'</span>
+      <span style="opacity:.4">→</span>
+      <span style="opacity:.4">${et ?? 'DEAD'}</span>`;
+  } else if (role === 'backtrack') {
+    d.className = 'trace-line bt-backtrack';
+    d.innerHTML = `<span class="tl-backtrack">↩</span>
+      <span>${ef}</span>
+      <span class="tl-sym">'${es}'</span>
+      <span>→</span>
+      <span class="tl-dead">DEAD — backtracking</span>`;
+  } else {
+    // 'explore'
+    d.className = 'trace-line';
+    d.innerHTML = `<span class="tl-explore">▶</span>
+      <span>${ef}</span>
+      <span class="tl-sym">'${es}'</span>
+      <span>→</span>
+      <span class="tl-explore">${et}</span>`;
+  }
+
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
+}
+
+function addTraceBtResult(stateLabel, accepted, reason) {
+  const log = document.getElementById('trace');
+  const d   = document.createElement('div');
+  d.className = 'trace-line';
+  if (accepted) {
+    d.innerHTML = `<span class="tl-success" style="font-size:15px;">★</span>
+      <span class="tl-success" style="font-weight:700;">Accepted at ${esc(stateLabel)}</span>`;
+  } else {
+    d.innerHTML = `<span class="tl-backtrack">↩</span>
+      <span class="tl-backtrack">${esc(reason) || `Rejected at ${esc(stateLabel)}`}</span>`;
+  }
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
+}
+
+function markAllCharsDone() {
+  document.querySelectorAll('.ch').forEach(c => {
+    c.classList.remove('active');
+    c.classList.add('done');
+  });
+}
+
+// Show NFA/DFA badge next to the DFA name in the canvas bar
+function updateNFABadge() {
+  const badge = document.getElementById('automaton-type-badge');
+  if (!badge) return;
+  badge.textContent = isNFAMode ? 'NFA' : 'DFA';
+  badge.style.background   = isNFAMode ? 'var(--yellow)' : 'var(--accent)';
+  badge.style.color        = 'var(--bg)';
+}
+
+function showResult(ok, msg) {
+  document.getElementById('result').innerHTML = `
+    <div class="result-box ${ok ? 'res-accept' : 'res-reject'}">
+      ${ok ? '✓ STRING ACCEPTED' : '✗ STRING REJECTED'}
+    </div>
+    <div class="res-sub">${esc(msg)}</div>`;
+}
+
+function updateChars() {
+  const inp = v('inp');
+  const box = document.getElementById('chars');
+  box.innerHTML = '';
+  if (!inp) {
+    box.innerHTML = '<span style="color:var(--muted);font-size:11px;align-self:center;margin:auto">type a string above...</span>';
+    return;
+  }
+  inp.split('').forEach((ch, i) => {
+    const d = document.createElement('div');
+    d.className = 'ch'; d.id = 'ch' + i; d.textContent = ch;
+    box.appendChild(d);
+  });
+}
+
+function markChar(idx, cls) {
+  document.querySelectorAll('.ch').forEach((c, i) => {
+    c.classList.remove('active');
+    if (i < idx) c.classList.add('done');
+  });
+  const el = document.getElementById('ch' + idx);
+  if (el) { el.classList.remove('done'); el.classList.add(cls); }
+}
+
+// SVG helpers
+function makeEl(tag) { return document.createElementNS('http://www.w3.org/2000/svg', tag); }
+function attr(el, attrs) { Object.entries(attrs).forEach(([k, val]) => el.setAttribute(k, val)); }
+function makeLine(svg, x1, y1, x2, y2, attrs) {
+  const l = makeEl('line'); attr(l, { x1, y1, x2, y2, ...attrs }); svg.appendChild(l);
+}
+function makeText(svg, x, y, txt, attrs) {
+  const t = makeEl('text'); attr(t, { x, y, ...attrs }); t.textContent = txt; svg.appendChild(t); return t;
+}
+function v(id) { return document.getElementById(id).value.trim(); }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Security: escape HTML entities to prevent XSS when inserting Neo4j data into innerHTML
+function esc(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function setBadge(txt, color) {
+  const dot = { green: 'dot-green', red: 'dot-red', yellow: 'dot-yellow' }[color];
+  document.getElementById('conn-badge').innerHTML =
+    `<span class="dot ${dot}"></span><span id="conn-txt">${txt}</span>`;
+}
+
+function setBar(txt, dfaName = null, stats = null) {
+  const bar = document.getElementById('bar');
+  if (dfaName) {
+    bar.innerHTML = `<span class="dfa-tag" id="automaton-type-badge">DFA</span>
+      <strong style="color:var(--accent); font-size:13px; letter-spacing:0.5px;">${esc(dfaName)}</strong>
+      ${stats ? `<span style="color:var(--muted)">·</span><span style="color:var(--muted)">${esc(stats)}</span>` : ''}`;
+  } else {
+    bar.textContent = txt;
+  }
+}
+
+function enableSimButtons(on) {
+  ['btn-reset','btn-step','btn-run'].forEach(id => {
+    document.getElementById(id).disabled = !on;
+  });
+}
+
+// ─────────────────────────────────────────────────────────
+// Position persistence (localStorage only — no browser dialogs)
+// ─────────────────────────────────────────────────────────
+let currentDfaId = null;
+let allLayouts   = {};
+
+const LS_KEY = 'automata-all-layouts';
+
+function loadAllLayouts() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) allLayouts = JSON.parse(raw);
+  } catch(e) {}
+  setFileStatus('Layouts auto-saved to browser storage. Use EXPORT/IMPORT to back up.');
+}
+
+function saveAllLayouts() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(allLayouts, null, 2)); } catch(e) {}
+}
+
+function pickLayoutFile() {
+  importLayoutJSON();
+}
+
+function exportLayoutJSON() {
+  if (!Object.keys(allLayouts).length) {
+    alert('No layout data to export yet. Load a DFA and adjust node positions first.');
+    return;
+  }
+  const blob = new Blob([JSON.stringify(allLayouts, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'automata-layouts.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importLayoutJSON() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json';
+  input.onchange = async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      allLayouts = { ...allLayouts, ...data };
+      await saveAllLayouts();
+      if (currentDfaId && allLayouts[currentDfaId]) {
+        applyPositions(currentDfaId);
+        resetView();
+        draw(curStates.length ? curStates : null);
+      }
+      setFileStatus('✅ Imported: <span style="color:var(--text);font-weight:600;">' + file.name + '</span>');
+    } catch(err) {
+      alert('Failed to parse JSON: ' + err.message);
+    }
+  };
+  input.click();
+}
+
+function setFileStatus(html) {
+  const el = document.getElementById('file-status');
+  if (el) el.innerHTML = html;
+}
+
+function savePositions() {
+  if (!currentDfaId) return;
+  const pos = {};
+  states.forEach(s => { pos[s.name] = { x: Math.round(s.x), y: Math.round(s.y) }; });
+  allLayouts[currentDfaId] = pos;
+  saveAllLayouts();
+}
+
+function applyPositions(dfaId) {
+  const pos = allLayouts[dfaId];
+  if (!pos) return false;
+  let any = false;
+  states.forEach(s => {
+    if (pos[s.name]) { s.x = pos[s.name].x; s.y = pos[s.name].y; any = true; }
+  });
+  return any;
+}
+
+function loadSavedPositions() { return applyPositions(currentDfaId); }
+
+function clearSavedPositions() {
+  if (!currentDfaId) return;
+  delete allLayouts[currentDfaId];
+  saveAllLayouts();
+  layout();
+  resetView();
+  draw(curStates.length ? curStates : null);
+  const sel = automata.find(a => a.id === currentDfaId);
+  setBar('', sel ? sel.name : currentDfaId,
+    `${states.length} states · ${transitions.length} transitions · layout reset`);
+  updateNFABadge();
+}
+
+// ─────────────────────────────────────────────────────────
+// Pan & Zoom
+// ─────────────────────────────────────────────────────────
+loadAllLayouts();
+let panX = 0, panY = 0, scale = 1;
+let isPanning = false, startPX = 0, startPY = 0;
+
+function applyTransform() {
+  document.getElementById('viewport').setAttribute(
+    'transform', `translate(${panX},${panY}) scale(${scale})`
+  );
+}
+
+function zoomBy(factor) {
+  const svg = document.getElementById('svg-canvas');
+  const cx  = svg.clientWidth / 2, cy = svg.clientHeight / 2;
+  panX = cx + (panX - cx) * factor;
+  panY = cy + (panY - cy) * factor;
+  scale *= factor;
+  applyTransform();
+}
+
+// --- THIS IS THE NEW TRUE "FIT TO SCREEN" LOGIC ---
+function resetView() {
+  if (!states || states.length === 0) {
+    panX = 0; panY = 0; scale = 1;
+    applyTransform();
+    return;
+  }
+
+  const svg = document.getElementById('svg-canvas');
+  const W = svg.clientWidth;
+  const H = svg.clientHeight;
+  const pad = 100; // Padding from the edge of the canvas
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  
+  // Find Bounding Box
+  states.forEach(s => {
+    if (s.x < minX) minX = s.x;
+    if (s.y < minY) minY = s.y;
+    if (s.x > maxX) maxX = s.x;
+    if (s.y > maxY) maxY = s.y;
+  });
+
+  // Account for the radius and outer rings
+  minX -= RO; minY -= RO; 
+  maxX += RO; maxY += RO;
+
+  const dfaW = Math.max(maxX - minX, 1);
+  const dfaH = Math.max(maxY - minY, 1);
+
+  // Calculate ideal scales to fit Width and Height
+  const scaleX = (W - pad * 2) / dfaW;
+  const scaleY = (H - pad * 2) / dfaH;
+
+  // Use the smallest scale to ensure everything fits, but cap zooming in to 1.5x
+  scale = Math.min(scaleX, scaleY, 1.5);
+
+  // Find center of DFA bounding box
+  const dfaCx = (minX + maxX) / 2;
+  const dfaCy = (minY + maxY) / 2;
+
+  // Calculate pan to map center of DFA to center of screen
+  panX = (W / 2) - (dfaCx * scale);
+  panY = (H / 2) - (dfaCy * scale);
+
+  applyTransform();
+}
+
+function initPanZoom() {
+  const svg = document.getElementById('svg-canvas');
+
+  svg.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect   = svg.getBoundingClientRect();
+    const mx     = e.clientX - rect.left;
+    const my     = e.clientY - rect.top;
+    const factor = e.deltaY < 0 ? 1.12 : 0.89;
+    panX = mx + (panX - mx) * factor;
+    panY = my + (panY - my) * factor;
+    scale *= factor;
+    applyTransform();
+  }, { passive: false });
+
+  svg.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    if (draggingNode) return;   
+    isPanning = true;
+    startPX   = e.clientX - panX;
+    startPY   = e.clientY - panY;
+    svg.style.cursor = 'grabbing';
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (draggingNode) {
+      const rect = svg.getBoundingClientRect();
+      const vp   = screenToViewport(e.clientX - rect.left, e.clientY - rect.top);
+      const s    = states.find(st => st.name === draggingNode);
+      if (s) {
+        s.x = vp.x; s.y = vp.y;
+        // Keep simulation highlights while dragging
+        draw(curStates.length ? curStates : null);
+      }
+      return;
+    }
+    if (!isPanning) return;
+    panX = e.clientX - startPX;
+    panY = e.clientY - startPY;
+    applyTransform();
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (draggingNode) {
+      draggingNode = null;
+      draw(curStates.length ? curStates : null);
+      savePositions();
+    }
+    isPanning = false;
+    document.getElementById('svg-canvas').style.cursor = 'grab';
+  });
+}
+
+window.addEventListener('resize', () => {
+  if (states.length) {
+    // Optional: auto-fit on window resize, but usually leaving the scale alone is better UX.
+    // resetView();
+    // draw(curIdx >= 0 ? states[curIdx].name : null);
+  }
+});
+
+initPanZoom();
+updateChars();
+
+// ─────────────────────────────────────────────────────────
+// Create Automaton Modal
+// ─────────────────────────────────────────────────────────
+let cAlphabet = [];   
+
+function openCreateModal() {
+  document.getElementById('c-name').value    = '';
+  document.getElementById('c-id').value      = '';
+  document.getElementById('c-desc').value    = '';
+  document.getElementById('c-sym-input').value = '';
+  document.getElementById('c-num-states').value = '3';
+  document.getElementById('c-is-nfa').checked  = false;
+  cAlphabet = [];
+  renderAlphaPills();
+  buildStateCards();
+  buildTransTable();
+  showModalMsg('', '');
+  document.getElementById('create-modal').classList.add('open');
+}
+
+function closeCreateModal() { document.getElementById('create-modal').classList.remove('open'); }
+document.getElementById('create-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('create-modal')) closeCreateModal();
+});
+
+function addSymbol() {
+  const inp = document.getElementById('c-sym-input');
+  const val = inp.value.trim().replace(/,/g,'');
+  if (!val) return;
+  if (!cAlphabet.includes(val)) {
+    cAlphabet.push(val); renderAlphaPills(); buildTransTable();
+  }
+  inp.value = ''; inp.focus();
+}
+
+function removeSymbol(sym) {
+  cAlphabet = cAlphabet.filter(s => s !== sym);
+  renderAlphaPills(); buildTransTable();
+}
+
+function setAlphabet(arr) {
+  cAlphabet = [...arr]; renderAlphaPills(); buildTransTable();
+}
+
+function renderAlphaPills() {
+  const box = document.getElementById('alpha-pills');
+  if (!cAlphabet.length) {
+    box.innerHTML = '<span style="font-size:12px;color:var(--muted);font-style:italic;margin-top:4px">No symbols added yet...</span>';
+    return;
+  }
+  box.innerHTML = cAlphabet.map(s => `
+    <div class="alpha-pill">
+      ${esc(s)} <button onclick="removeSymbol('${esc(s)}')" title="Remove">×</button>
+    </div>`).join('');
+}
+
+function getStateNames() {
+  const n = parseInt(document.getElementById('c-num-states').value) || 1;
+  return Array.from({length: n}, (_, i) => 'q' + i);
+}
+
+function buildStateCards() {
+  const names = getStateNames();
+  const box   = document.getElementById('state-cards');
+
+  box.innerHTML = names.map((name, i) => `
+    <div class="state-card">
+      <span class="state-card-name">${esc(name)}</span>
+      <label><input type="radio" name="start-state" value="${esc(name)}" ${i===0?'checked':''}> Start</label>
+      <label><input type="checkbox" class="accept-cb" value="${esc(name)}"> Accept</label>
+      <label style="margin-left:auto"><input type="checkbox" class="dead-cb" value="${esc(name)}"> <span style="color:var(--muted)">Dead/Trap</span></label>
+    </div>`).join('');
+  buildTransTable();
+}
+
+function buildTransTable() {
+  const names = getStateNames();
+  const syms  = cAlphabet;
+  const isNFA = document.getElementById('c-is-nfa').checked;
+  const wrap  = document.getElementById('trans-table-wrap');
+
+  if (!syms.length || !names.length) {
+    wrap.innerHTML = '<div style="padding: 16px;"><em style="font-size:12px;color:var(--muted)">Add alphabet symbols first...</em></div>';
+    return;
+  }
+
+  let html = `<table class="trans-table">
+    <thead><tr>
+      <th>State \\ Symbol</th>
+      ${syms.map(s => `<th>${esc(s)}</th>`).join('')}
+    </tr></thead><tbody>`;
+
+  names.forEach(state => {
+    html += `<tr>
+      <td class="state-label">${esc(state)}</td>
+      ${syms.map(sym => `
+        <td>
+          <input class="trans-cell${isNFA?' nfa':''}"
+            id="trans-${esc(state)}-${esc(sym)}"
+            placeholder="${isNFA ? 'e.g. q0,q1' : 'e.g. q1'}"
+            list="state-datalist">
+        </td>`).join('')}
+    </tr>`;
+  });
+
+  html += `</tbody></table>
+    <datalist id="state-datalist">
+      ${names.map(n=>`<option value="${esc(n)}">`).join('')}
+    </datalist>`;
+  wrap.innerHTML = html;
+}
+
+function showModalMsg(text, type) {
+  const el = document.getElementById('modal-msg');
+  if (!text) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  el.className = 'modal-msg ' + type;
+  el.textContent = text;
+}
+
+// ─────────────────────────────────────────────────────────
+// Delete Automaton
+// ─────────────────────────────────────────────────────────
+function openDeleteModal() {
+  const id       = v('dfa-dropdown');
+  const selected = automata.find(a => a.id === id);
+  if (!selected) return;
+
+  document.getElementById('del-name-label').textContent = `"${selected.name}"`;
+  document.getElementById('btn-del-confirm').disabled   = false;
+  document.getElementById('delete-modal').classList.add('open');
+}
+
+function closeDeleteModal() {
+  document.getElementById('delete-modal').classList.remove('open');
+}
+
+// Close on backdrop click
+
+
+async function confirmDelete() {
+  const id       = v('dfa-dropdown');
+  const selected = automata.find(a => a.id === id);
+  if (!selected || !globalDriver) return;
+
+  const confirmBtn = document.getElementById('btn-del-confirm');
+  const cancelBtn  = document.getElementById('btn-del-cancel');
+  confirmBtn.disabled = true;
+  cancelBtn.disabled  = true;
+  confirmBtn.textContent = 'Deleting…';
+
+  try {
+    const ses = globalDriver.session({ database: v('db') });
+
+    // Delete all states (and their transitions) belonging to this automaton,
+    // then delete the Automaton node itself — all in one transaction.
+    await ses.run(`
+      MATCH (a:Automaton {id: $id})
+      OPTIONAL MATCH (a)-[:HAS_STATE]->(s:State)
+      DETACH DELETE s, a
+    `, { id });
+
+    await ses.close();
+
+    // If the deleted automaton was currently loaded — clear the canvas
+    if (typeof currentDfaId !== 'undefined' && currentDfaId === id) {
+      states      = [];
+      transitions = [];
+      currentDfaId = null;
+      draw();
+      resetSim();
+      enableSimButtons(false);
+      document.getElementById('hint').style.display = '';
+      setBar('Connect to Neo4j and select a DFA to begin');
+    }
+
+    closeDeleteModal();
+
+    // Refresh the dropdown list
+    await connectAndFetch();
+    setBar(`Deleted "${selected.name}" successfully.`);
+
+  } catch (e) {
+    confirmBtn.textContent = '🗑 DELETE';
+    confirmBtn.disabled    = false;
+    cancelBtn.disabled     = false;
+    // Show error inside the modal
+    const p = document.querySelector('.del-modal p');
+    p.innerHTML = `<span style="color:var(--red);font-weight:600">Error: ${esc(e.message)}</span>`;
+  }
+}
+
+async function saveAutomaton() {
+  const name  = document.getElementById('c-name').value.trim();
+  const id    = document.getElementById('c-id').value.trim();
+  const desc  = document.getElementById('c-desc').value.trim();
+  const names = getStateNames();
+  const syms  = cAlphabet;
+
+  if (!name)   { showModalMsg('Please enter an automaton name.', 'err'); return; }
+  if (!id)     { showModalMsg('Please enter a unique ID.', 'err'); return; }
+  if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+    showModalMsg('ID can only contain letters, numbers, _ and -', 'err'); return;
+  }
+  if (!syms.length) { showModalMsg('Please add at least one symbol to the alphabet.', 'err'); return; }
+
+  const startState = document.querySelector('input[name="start-state"]:checked')?.value;
+  if (!startState) { showModalMsg('Please select a start state.', 'err'); return; }
+
+  const acceptStates = new Set([...document.querySelectorAll('.accept-cb:checked')].map(el => el.value));
+  const deadStates = new Set([...document.querySelectorAll('.dead-cb:checked')].map(el => el.value));
+
+  const transList = []; 
+  for (const state of names) {
+    if (deadStates.has(state)) continue;   
+    for (const sym of syms) {
+      const cell = document.getElementById(`trans-${state}-${sym}`);
+      if (!cell) continue;
+      const val = cell.value.trim();
+      if (!val) continue;
+
+      const targets = val.split(',').map(s => s.trim()).filter(Boolean);
+      for (const target of targets) {
+        if (!names.includes(target)) {
+          showModalMsg(`Unknown state "${target}" in cell [${state}, ${sym}]`, 'err');
+          return;
+        }
+        transList.push({ from: state, symbol: sym, to: target });
+      }
+    }
+  }
+
+  if (!globalDriver) { showModalMsg('Not connected to Neo4j. Connect first.', 'err'); return; }
+
+  const btn = document.getElementById('btn-modal-save');
+  btn.disabled = true;
+  showModalMsg('Saving to Neo4j...', 'ok');
+
+  try {
+    const db  = v('db');
+    const ses = globalDriver.session({ database: db });
+
+    const exists = await ses.run('MATCH (a:Automaton {id:$id}) RETURN a', { id });
+    if (exists.records.length > 0) {
+      await ses.close(); showModalMsg(`ID "${id}" already exists.`, 'err'); btn.disabled = false; return;
+    }
+
+    await ses.run('CREATE (:Automaton {id:$id, name:$name, description:$desc})', { id, name, desc });
+
+    for (const state of names) {
+      await ses.run(
+        `CREATE (:State { name: $uname, label: $label, isStart: $isStart, isAccept: $isAccept })`,
+        { uname: id + '_' + state, label: state, isStart: state === startState, isAccept: acceptStates.has(state) }
+      );
+    }
+
+    for (const state of names) {
+      await ses.run(
+        `MATCH (a:Automaton {id:$id}), (s:State {name:$sname}) CREATE (a)-[:HAS_STATE]->(s)`,
+        { id, sname: id + '_' + state }
+      );
+    }
+
+    for (const tr of transList) {
+      await ses.run(
+        `MATCH (f:State {name:$fn}), (t:State {name:$tn}) CREATE (f)-[:TRANSITION {symbol:$sym}]->(t)`,
+        { fn: id + '_' + tr.from, tn: id + '_' + tr.to, sym: tr.symbol }
+      );
+    }
+
+    await ses.close();
+    showModalMsg(`✓ Saved! "${name}" created with ${names.length} states.`, 'ok');
+    
+    await connectAndFetch();
+    const dd = document.getElementById('dfa-dropdown');
+    if (dd) { dd.value = id; onDfaChange(); }
+    setTimeout(() => closeCreateModal(), 1400);
+
+  } catch(e) {
+    showModalMsg('Neo4j error: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>
+<!-- ── Delete Confirmation Modal ── -->
+<div class="del-modal-overlay" id="delete-modal">
+  <div class="del-modal">
+    <h3>⚠ DELETE AUTOMATON</h3>
+    <p>This will permanently remove <strong id="del-name-label">this automaton</strong> and all its states and transitions from the database.<br>This action cannot be undone.</p>
+    <div class="del-modal-btns">
+      <button class="btn-del-cancel" id="btn-del-cancel" onclick="closeDeleteModal()">CANCEL</button>
+      <button class="btn-del-confirm" id="btn-del-confirm" onclick="confirmDelete()">🗑 DELETE</button>
+    </div>
+  </div>
+</div>
+
+<script>
+window.addEventListener('beforeunload', function (e) {
+  // If we have an active DFA layout that we can export
+  if (states && states.length > 0 && currentDfaId) {
+    // We cannot automatically trigger exportLayoutJSON() because browsers block file downloads in beforeunload.
+    // Instead, we show a standard confirmation dialog.
+    const msg = "You have an active Automaton layout. Are you sure you want to leave without exporting your layout?";
+    e.preventDefault();
+    e.returnValue = msg;
+    return msg;
+  }
+});
+</script>
+</body>
+</html>
