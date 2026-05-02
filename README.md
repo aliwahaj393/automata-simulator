@@ -1,5 +1,7 @@
 # Automata Simulator (Neo4j Powered)
 
+![Simulator Demo](demo.gif)
+
 A comprehensive, single-page web application for visualizing and simulating Deterministic and Non-Deterministic Finite Automata (DFA/NFA) using a Neo4j graph database backend.
 
 ## Features
@@ -63,6 +65,33 @@ If you prefer not to install anything, you can use [Neo4j AuraDB](https://neo4j.
 - Use the controls in the bottom right to zoom in/out or fit to screen.
 - Use the **↓ EXPORT** button to save your layout locally to a JSON file.
 - Use the **↑ IMPORT** button to load a previously saved layout arrangement.
+
+---
+
+## Importing the Pre-Built DFAs
+
+To get started quickly, you can import the provided `.dump` file located in the `examples/` folder. This database contains the solutions for Assignment 2.
+
+Follow these steps to load it into Neo4j Desktop:
+
+1. **Open Neo4j Desktop**.
+2. Click on **Add** or **Create Instance** to make a new local DBMS.
+
+![Create Instance](step1.png)
+
+3. Enter an **Instance name** (e.g., `temp1`).
+4. Set the **Password** (make sure it's at least 8 characters).
+
+![Enter Details](step2.png)
+
+5. Click the dropdown arrow next to **Load from .dump, .backup or .tar (optional)**.
+6. Click **Browse** and select `Assignment_2.dump` from the `examples/` folder.
+
+![Browse for Dump](step3.png)
+
+7. Click **Create**. Neo4j will create the instance and automatically load all the graph data from the dump file.
+8. Wait for the creation to finish, then click **Start** to run the instance.
+9. Open the Simulator in your browser (`index.html`), enter your password, and click **CONNECT** to start exploring the DFAs!
 
 ---
 
